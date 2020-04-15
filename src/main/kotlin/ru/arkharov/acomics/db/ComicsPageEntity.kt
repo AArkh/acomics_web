@@ -1,7 +1,5 @@
 package ru.arkharov.acomics.db
 
-import ru.arkharov.acomics.db.COMICS_TABLE
-import ru.arkharov.acomics.db.CatalogEntity
 import javax.persistence.*
 
 @Entity
@@ -9,7 +7,7 @@ import javax.persistence.*
 	name = COMICS_TABLE,
 	indexes = [Index(columnList = "comicsTitle", unique = false)]
 )
-open class ComicsPageEntity(
+data class ComicsPageEntity(
 	val comicsTitle: String,
 	@field:Id
 	val imageUrl: String,
