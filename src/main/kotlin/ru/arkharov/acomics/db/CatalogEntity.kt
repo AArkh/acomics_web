@@ -1,6 +1,5 @@
 package ru.arkharov.acomics.db
 
-import ru.arkharov.acomics.db.CATALOG_TABLE
 import javax.persistence.*
 
 //todo поиграться с составными индексами, посмотреть, как ЕП мобилки отрабатывать будет
@@ -30,11 +29,11 @@ data class CatalogEntity(
 )
 
 //todo here
-enum class MPAARating(val queryParamValue: String) {
-	UNDEFINED("1"),
-	G("2"),
-	PG("3"),
-	PG_13("4"),
-	R("5"),
-	NC_17("6");
+enum class MPAARating(val queryParamValue: String, val stringValue: String) {
+	UNDEFINED("1", "NR"),
+	G("2", "G"),
+	PG("3", "PG"),
+	PG_13("4", "PG-13"),
+	R("5", "R"),
+	NC_17("6", "NC-17");
 }

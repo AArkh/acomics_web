@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import ru.arkharov.acomics.db.MPAARating
 import ru.arkharov.acomics.service.model.SearchResponseCatalogItem
 import java.sql.ResultSet
 
@@ -17,24 +18,29 @@ class CatalogController(
 	
 	private val logger = LoggerFactory.getLogger(this::class.java)
 	private val validSortParams = arrayOf("last_updated", "total_subscribers", "total_pages", "title")
+	private val validRatingParams = arrayOf(*MPAARating.values().map { it.stringValue }.toTypedArray())
 	
 	@GetMapping("/search")
 	fun search(
 		@RequestParam(required = true) page: Int,
 		@RequestParam(required = true) sortingBy: String,
 		@RequestParam(required = true) isAsc: String,
-		@RequestParam(defaultValue = "20") perPage: Int
+		@RequestParam(defaultValue = "20") perPage: Int,
+		@RequestParam(required = false) rating: Array<String>?
 	): List<SearchResponseCatalogItem> {
 		logger.info("requested search with sort: $sortingBy")
 		validateSortParam(sortingBy)
 		validateIsAscParam(isAsc)
 		validatePageParam(page)
 		validateOffsetParam(perPage)
+		validateRatingParam(rating)
 		val sort = sortingBy + if (isAsc.toBoolean()) "" else " DESC"
 		val offsetForPage = perPage * (page - 1)
+		val where = formRatingQueryPart(rating)
 		return jdbcTemplate.query("""
 			SELECT title, preview_image, description, rating, last_updated, total_pages, total_subscribers
 			FROM catalog
+			$where
 			ORDER BY $sort
 			LIMIT $perPage
 			OFFSET $offsetForPage"""
@@ -54,7 +60,7 @@ class CatalogController(
 	private fun validateSortParam(userInput: String) {
 		if (!validSortParams.contains(userInput)) {
 			throw IllegalArgumentException(
-				"$userInput is not a valid param \"sortingBy\", use one of ${validSortParams.contentToString()}"
+				"$userInput is not a valid param \"sortingBy\", use one of ${validSortParams.joinToString()}"
 			)
 		}
 	}
@@ -75,6 +81,25 @@ class CatalogController(
 		if (perPage <= 0) {
 			throw IllegalArgumentException("$perPage is not a valid \"perPage\" param, use positive number")
 		}
+	}
+	
+	private fun validateRatingParam(rating: Array<String>?) {
+		if (rating == null) {
+			return
+		}
+		rating.forEach { rate: String ->
+			if (!validRatingParams.contains(rate.toUpperCase())) {
+				throw IllegalArgumentException(
+					"$rate is not a valid \"rating\" param, use on of ${validRatingParams.joinToString()}"
+				)
+			}
+		}
+	}
+	
+	private fun formRatingQueryPart(rating: Array<String>?): String {
+		return if (!rating.isNullOrEmpty()) {
+			"WHERE rating IN('${rating.joinToString("', '")}')"
+		} else ""
 	}
 }
 
