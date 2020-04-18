@@ -2,7 +2,6 @@ package ru.arkharov.acomics.db
 
 import javax.persistence.*
 
-//todo поиграться с составными индексами, посмотреть, как ЕП мобилки отрабатывать будет
 @Entity
 @Table(
 	name = CATALOG_TABLE,
@@ -28,7 +27,6 @@ data class CatalogEntity(
 	val totalSubscribers: Int
 )
 
-//todo here
 enum class MPAARating(val queryParamValue: String, val stringValue: String) {
 	UNDEFINED("1", "NR"),
 	G("2", "G"),
