@@ -1,0 +1,46 @@
+version: '3.7'
+services:
+  nginx_server:
+    image: nginx:latest
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      - acomics-network
+    depends_on:
+      - acomics-service
+    restart: always
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      #- /root/nginx:/etc/nginx/conf.d
+
+  acomics-service:
+    image: stereocabbage/acomics:latest
+    restart: always
+    networks:
+      - acomics-network
+    depends_on:
+      - acomics-database
+    environment:
+      - "SPRING_DATASOURCE_URL=jdbc:mysql://acomics-database/${DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true&autoreconnect=true"
+      - "SPRING_DATASOURCE_USERNAME=${DB_USER}"
+      - "SPRING_DATASOURCE_PASSWORD=${DB_USER_PASS}"
+
+  acomics-database:
+    image: mysql:8.0.19
+    networks:
+      - acomics-network
+    environment:
+      - "MYSQL_ROOT_PASSWORD=${DB_ROOT_PASS}"
+      - "MYSQL_USER=${DB_USER}"
+      - "MYSQL_PASSWORD=${DB_USER_PASS}"
+      - "MYSQL_DATABASE=${DB_NAME}"
+      - MYSQL_ONETIME_PASSWORD=true
+      - spring.jpa.hibernate.ddl-auto=none
+    volumes:
+      - ./data:/var/lib/mysql
+      #- /root/data:/var/lib/mysql
+
+networks:
+  acomics-network:
+    name: acomics-network

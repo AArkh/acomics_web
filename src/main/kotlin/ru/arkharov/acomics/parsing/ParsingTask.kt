@@ -15,6 +15,7 @@ import ru.arkharov.acomics.parsing.comics.ComicsHTMLParser
 import ru.arkharov.acomics.parsing.comics.ComicsPageData
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.TimeUnit
 import java.util.function.Function
 
 
@@ -59,7 +60,6 @@ class ParsingTask(
 		var updatedComicsItems = 0
 		var page = 0
 		try {
-			logger.info("started parsing at ${dateFormat.format(Date())}")
 			var catalogParsed = false
 			while (!catalogParsed) {
 				logger.info("parsing page ${page + 1}\n\n")
@@ -104,6 +104,7 @@ class ParsingTask(
 	fun initialParseTask() {
 		logger.info("initial parsing in progress")
 		var page = 0
+		val startTime = System.currentTimeMillis()
 		try {
 			logger.info("started parsing at ${dateFormat.format(Date())}")
 			var catalogParsed = false
@@ -121,7 +122,9 @@ class ParsingTask(
 				}
 				page++
 			}
-			logger.info("parsing ended at ${dateFormat.format(Date())}")
+			val finishTime = System.currentTimeMillis()
+			val resultParsingTime = TimeUnit.MILLISECONDS.toMinutes(startTime - finishTime)
+			logger.info("parsing ended at ${dateFormat.format(Date())}, and took $resultParsingTime minutes")
 		} catch (e: Exception) {
 			logger.error("initial parsing failed at page $page", e)
 		}
