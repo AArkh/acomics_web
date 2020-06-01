@@ -1,7 +1,7 @@
 package ru.arkharov.acomics.service.model
 
 data class ComicsResponseItem(
-	val comicsTitle: String,
-	val imageUrl: String,
-	val issueName: String // Название главы или странички, может отсутствовать.
+	val comics_title: String,
+	val image_url: String,
+	val issue_name: String // Название главы или странички, может отсутствовать.
 )

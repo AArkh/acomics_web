@@ -11,11 +11,11 @@ services:
       - acomics-service
     restart: always
     volumes:
-      - ./nginx:/etc/nginx/conf.d
-      #- /root/nginx:/etc/nginx/conf.d
+      #- ./nginx:/etc/nginx/conf.d
+      - /root/nginx:/etc/nginx/conf.d
 
   acomics-service:
-    image: stereocabbage/acomics:latest
+    image: stereocabbage/acomics:1.0.2
     restart: always
     networks:
       - acomics-network
@@ -38,8 +38,8 @@ services:
       - MYSQL_ONETIME_PASSWORD=true
       - spring.jpa.hibernate.ddl-auto=none
     volumes:
-      - ./data:/var/lib/mysql
-      #- /root/data:/var/lib/mysql
+      #- ./data:/var/lib/mysql
+      - /root/data:/var/lib/mysql
 
 networks:
   acomics-network:
