@@ -11,7 +11,7 @@ import java.sql.ResultSet
 
 @Component
 @RestController
-class ComicsController (
+class ComicsController(
 	private val jdbcTemplate: JdbcTemplate
 ) {
 	
