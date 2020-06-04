@@ -17,13 +17,13 @@ class ComicsController(
 	
 	private val logger = LoggerFactory.getLogger(this::class.java)
 	
-	@GetMapping("/comics/{comicsTitle}")
-	fun searchComics(@PathVariable(required = true) comicsTitle: String): List<ComicsResponseItem> {
-		logger.info("requested comics with path: $comicsTitle")
+	@GetMapping("/comics/{catalogId}")
+	fun searchComics(@PathVariable(required = true) catalogId: String): List<ComicsResponseItem> {
+		logger.info("requested comics with path: $catalogId")
 		return jdbcTemplate.query("""
 			SELECT comics_title, image_url, issue_name
 			FROM comics
-			WHERE comics_title = '$comicsTitle'
+			WHERE catalog_catalog_id = '$catalogId'
 			ORDER BY image_url"""
 		) { result: ResultSet, _ ->
 			return@query ComicsResponseItem(

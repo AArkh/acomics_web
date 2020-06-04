@@ -16,7 +16,7 @@ services:
       # Верхний дев, нижний прод.
 
   acomics-service:
-    image: stereocabbage/acomics:1.0.4
+    image: stereocabbage/acomics:1.0.5
     restart: always
     networks:
       - acomics-network
@@ -37,7 +37,7 @@ services:
       - "MYSQL_PASSWORD=${DB_USER_PASS}"
       - "MYSQL_DATABASE=${DB_NAME}"
       - MYSQL_ONETIME_PASSWORD=true
-      - spring.jpa.hibernate.ddl-auto=none
+      - spring.jpa.hibernate.ddl-auto=update
     volumes:
       #- ./data:/var/lib/mysql
       - /root/data:/var/lib/mysql

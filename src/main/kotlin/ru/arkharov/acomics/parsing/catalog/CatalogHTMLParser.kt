@@ -5,6 +5,7 @@ import org.jsoup.nodes.Document
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import ru.arkharov.acomics.db.CatalogEntity
+import java.net.URI
 import java.text.ParseException
 import java.util.regex.Pattern
 
@@ -36,9 +37,12 @@ class CatalogHTMLParser {
 			val previewElement = htmlString.getElementsByClass(CATALOG_ELEMENT_PREVIEW_IMAGE_CLASS_NAME)
 				.first()
 				.child(0)
-			val comicLink = previewElement.attr("href")
-			val imageLinkPostfix = previewElement.getElementsByTag("img")
-				.attr("src")
+			val comicLink:String = previewElement.attr("href")
+			var catalogId = URI(comicLink).path.split("/").last()
+			if (catalogId.first() == '~') {
+				catalogId = catalogId.substring(1)
+			}
+			val imageLinkPostfix = previewElement.getElementsByTag("img").attr("src")
 			val imageLink = BASE_ACOMICS_URL + imageLinkPostfix
 			
 			val descriptionElement = htmlString.getElementsByClass(CATALOG_ELEMENT_DESCRIPTION_CLASS_NAME)
@@ -80,6 +84,7 @@ class CatalogHTMLParser {
 			val totalPages = Integer.valueOf(matcher.group())
 			
 			val catalogItem = CatalogEntity(
+				catalogId,
 				comicLink,
 				imageLink,
 				title,

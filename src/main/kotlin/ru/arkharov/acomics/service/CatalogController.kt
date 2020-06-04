@@ -38,7 +38,7 @@ class CatalogController(
 		val offsetForPage = perPage * (page - 1)
 		val where = formRatingQueryPart(rating)
 		return jdbcTemplate.query("""
-			SELECT title, preview_image, description, rating, last_updated, total_pages, total_subscribers
+			SELECT catalog_id, title, preview_image, description, rating, last_updated, total_pages, total_subscribers
 			FROM catalog
 			$where
 			ORDER BY $sort
@@ -46,6 +46,7 @@ class CatalogController(
 			OFFSET $offsetForPage"""
 		) { result: ResultSet, _ ->
 			return@query SearchResponseCatalogItem(
+				result.getString("catalog_id"),
 				result.getString("title"),
 				result.getString("preview_image"),
 				result.getString("description"),

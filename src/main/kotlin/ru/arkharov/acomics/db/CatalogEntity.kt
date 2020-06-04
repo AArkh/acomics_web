@@ -6,6 +6,7 @@ import javax.persistence.*
 @Table(
 	name = CATALOG_TABLE,
 	indexes = [
+		Index(columnList = "title"),
 		Index(columnList = "lastUpdated"),
 		Index(columnList = "totalPages"),
 		Index(columnList = "rating"),
@@ -13,10 +14,11 @@ import javax.persistence.*
 	]
 )
 data class CatalogEntity(
-	val hyperLink: String,
-	val previewImage: String,
 	@field:Id
 	@field:Column(unique = true, nullable = false)
+	val catalogId: String,
+	val hyperLink: String,
+	val previewImage: String,
 	val title: String,
 	val description: String,
 	val rating: String,
