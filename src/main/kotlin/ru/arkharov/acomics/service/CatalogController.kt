@@ -26,7 +26,8 @@ class CatalogController(
 		@RequestParam(required = true) sortingBy: String,
 		@RequestParam(required = true) isAsc: String,
 		@RequestParam(defaultValue = "20") perPage: Int,
-		@RequestParam(required = false) rating: Array<String>?
+		@RequestParam(required = false) rating: Array<String>?,
+		@RequestParam(required = false) minPages: Int?
 	): List<SearchResponseCatalogItem> {
 		logger.info("requested search with sort: $sortingBy")
 		validateSortParam(sortingBy)
@@ -34,9 +35,10 @@ class CatalogController(
 		validatePageParam(page)
 		validateOffsetParam(perPage)
 		validateRatingParam(rating)
+		validateMinPagesParam(minPages)
 		val sort = sortingBy + if (isAsc.toBoolean()) "" else " DESC"
 		val offsetForPage = perPage * (page - 1)
-		val where = formRatingQueryPart(rating)
+		val where = formRatingQueryPart(rating, minPages)
 		return jdbcTemplate.query("""
 			SELECT catalog_id, title, preview_image, description, rating, last_updated, total_pages, total_subscribers
 			FROM catalog
@@ -97,10 +99,25 @@ class CatalogController(
 		}
 	}
 	
-	private fun formRatingQueryPart(rating: Array<String>?): String {
-		return if (!rating.isNullOrEmpty()) {
-			"WHERE rating IN('${rating.joinToString("', '")}')"
+	private fun validateMinPagesParam(minPages: Int?) {
+		if (minPages != null && minPages <= 0) {
+			throw IllegalArgumentException("$minPages is not a valid \"minPages\" param, use positive number")
+		}
+	}
+	
+	private fun formRatingQueryPart(rating: Array<String>?, minPages: Int?): String {
+		val ratingPart = if (!rating.isNullOrEmpty()) {
+			"rating IN('${rating.joinToString("', '")}')"
 		} else ""
+		val minPagesPart = if (minPages != null) {
+			"total_pages >= $minPages"
+		} else ""
+		if (ratingPart.isEmpty() && minPagesPart.isEmpty()) {
+			return ""
+		}
+		return if (ratingPart.isNotEmpty() xor minPagesPart.isNotEmpty()) {
+			"WHERE $ratingPart$minPagesPart"
+		} else "WHERE $ratingPart AND $minPagesPart"
 	}
 }
 
