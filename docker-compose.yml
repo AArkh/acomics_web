@@ -16,7 +16,7 @@ services:
       # Верхний дев, нижний прод.
 
   acomics-service:
-    image: stereocabbage/acomics:1.0.7
+    image: stereocabbage/acomics:1.0.8
     restart: always
     networks:
       - acomics-network

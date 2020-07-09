@@ -6,11 +6,9 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.util.UriBuilder
-import ru.arkharov.acomics.db.CatalogEntity
-import ru.arkharov.acomics.db.CatalogRepository
-import ru.arkharov.acomics.db.ComicsPageEntity
-import ru.arkharov.acomics.db.ComicsRepository
+import ru.arkharov.acomics.db.*
 import ru.arkharov.acomics.parsing.catalog.CatalogHTMLParser
+import ru.arkharov.acomics.parsing.comics.ComicsComments
 import ru.arkharov.acomics.parsing.comics.ComicsHTMLParser
 import ru.arkharov.acomics.parsing.comics.ComicsPageData
 import java.text.SimpleDateFormat
@@ -38,19 +36,22 @@ class ParsingTask(
 	private val catalogParser: CatalogHTMLParser,
 	private val comicsParser: ComicsHTMLParser,
 	private val catalogRepository: CatalogRepository,
-	private val comicsRepository: ComicsRepository
+	private val comicsRepository: ComicsRepository,
+	private val commentsRepository: CommentsRepository
 ) {
 	
 	private val dateFormat = SimpleDateFormat("HH:mm:ss")
 	private val logger = LoggerFactory.getLogger(this::class.java)
-	
 	private val ratingParams = arrayOf("1", "2", "3", "4", "5", "6")
+	private val block = Any()
 	
 	@Scheduled(fixedDelay = HOUR)
 	fun parse() {
 		if (comicsRepository.count() >= 0) {
+			logger.info("Updating starts")
 			updateParsingTask()
 		} else {
+			logger.info("Initial parsing starts")
 			initialParseTask()
 		}
 	}
@@ -70,10 +71,10 @@ class ParsingTask(
 					continue
 				}
 				catalogPageEntries.parallelStream().forEach { catalogEntry: CatalogEntity ->
-					val optionalSavedEntry: Optional<CatalogEntity> = catalogRepository.findById(catalogEntry.title)
+					val optionalSavedEntry: Optional<CatalogEntity> = catalogRepository.findById(catalogEntry.catalogId)
 					if (!optionalSavedEntry.isPresent) {
-						logger.info("found new comics of title: ${catalogEntry.title}")
-						val comicsEntries: List<ComicsPageEntity> = getComicsPages(catalogEntry)
+						logger.info("found new comics of title: ${catalogEntry.title}, catalogId: ${catalogEntry.catalogId}")
+						val comicsEntries: List<ComicsPageData> = getComicsPages(catalogEntry)
 						updatedCatalogItems++
 						updatedComicsItems += comicsEntries.size
 						upsert(catalogEntry, comicsEntries)
@@ -81,7 +82,7 @@ class ParsingTask(
 						val savedEntry: CatalogEntity = optionalSavedEntry.get()
 						if (savedEntry.olderThan(catalogEntry)) {
 							logger.info("${catalogEntry.title} is changed, updating whole entry")
-							val comicsEntries: List<ComicsPageEntity> = getComicsPages(catalogEntry)
+							val comicsEntries: List<ComicsPageData> = getComicsPages(catalogEntry)
 							updatedCatalogItems++
 							updatedComicsItems += comicsEntries.size
 							upsert(catalogEntry, comicsEntries)
@@ -102,14 +103,13 @@ class ParsingTask(
 	}
 	
 	fun initialParseTask() {
-		logger.info("initial parsing in progress")
 		var page = 0
 		val startTime = System.currentTimeMillis()
 		try {
 			logger.info("started parsing at ${dateFormat.format(Date())}")
 			var catalogParsed = false
 			while (!catalogParsed) {
-				logger.info("parsing page ${page + 1}\n\n")
+				logger.info("\nparsing page ${page + 1}\n")
 				val catalogHtml: String = retrieveCatalogHtml(page, CATALOG_SORT_QUERY_BY_APLHABET)
 				val catalogPageEntries: List<CatalogEntity> = catalogParser.parse(catalogHtml)
 				if (catalogPageEntries.isEmpty()) {
@@ -117,7 +117,8 @@ class ParsingTask(
 					continue
 				}
 				catalogPageEntries.parallelStream().forEach { catalogEntry: CatalogEntity ->
-					val comicsEntries: List<ComicsPageEntity> = getComicsPages(catalogEntry)
+					val comicsEntries: List<ComicsPageData> = getComicsPages(catalogEntry)
+					logger.info("found comics of title: ${catalogEntry.title}, catalogId: ${catalogEntry.catalogId}")
 					upsert(catalogEntry, comicsEntries)
 				}
 				page++
@@ -130,36 +131,69 @@ class ParsingTask(
 		}
 	}
 	
+	fun upsert(catalogEntry: CatalogEntity, comicsParsedPages: List<ComicsPageData>) {
+		val commentsEntities: MutableList<CommentsEntity> = LinkedList()
+		val comicsEntries: List<ComicsPageEntity> = comicsParsedPages.map { comicsPageData: ComicsPageData ->
+			val comicsEntity = ComicsPageEntity(
+				catalogEntry.title,
+				comicsPageData.imageUrl,
+				comicsPageData.issueName,
+				catalogEntry
+			)
+			commentsEntities.addAll(comicsPageData.comments.map { comicsComments: ComicsComments ->
+				CommentsEntity(
+					userName = comicsComments.userName,
+					userStatus = comicsComments.userStatus,
+					userAvatarImageUrl = comicsComments.userProfileUrl,
+					commentBody = comicsComments.commentBody,
+					formattedDate = comicsComments.formattedDate,
+					comics = comicsEntity
+				)
+			})
+			return@map comicsEntity
+		}
+		upsertToDb(catalogEntry, comicsEntries, commentsEntities)
+	}
+	
 	@Transactional
-	fun upsert(catalogEntry: CatalogEntity, comicsEntries: List<ComicsPageEntity>) {
-		catalogRepository.save(catalogEntry)
-		if (comicsEntries.isNotEmpty()) {
-			comicsRepository.saveAll(comicsEntries)
+	fun upsertToDb(
+		catalogEntry: CatalogEntity,
+		comicsEntries: List<ComicsPageEntity>,
+		commentsEntity: List<CommentsEntity>
+	) {
+		synchronized(block) {
+			val startTime = System.currentTimeMillis()
+			catalogRepository.save(catalogEntry)
+			if (comicsEntries.isNotEmpty()) {
+				val previousComics = comicsRepository.findByCatalog(catalogEntry)
+				previousComics.forEach { previousComics: ComicsPageEntity ->
+					commentsRepository.deleteByComics(previousComics)
+				}
+				comicsRepository.deleteByCatalog(catalogEntry)
+				comicsRepository.saveAll(comicsEntries)
+				commentsRepository.saveAll(commentsEntity)
+			}
+			val finishTime = System.currentTimeMillis()
+			logger.info("db updated for ${finishTime - startTime}ms, for ${catalogEntry.catalogId}")
 		}
 	}
 	
-	private fun getComicsPages(catalogEntry: CatalogEntity): List<ComicsPageEntity> {
+	fun getComicsPages(catalogEntry: CatalogEntity): List<ComicsPageData> {
 		if (catalogEntry.totalPages == 0) {
-			logger.info("comics: ${catalogEntry.title} has no pages at all")
+			logger.info("comics: ${catalogEntry.title} has no pages at all, catalog url: ${catalogEntry.hyperLink}")
 			return emptyList()
 		}
 		try {
-			val pageEntries: Array<ComicsPageEntity?> = arrayOfNulls(catalogEntry.totalPages)
+			val pageEntries: Array<ComicsPageData?> = arrayOfNulls(catalogEntry.totalPages)
 			val pagesIndexesToParse: List<Int> = Array(catalogEntry.totalPages) { return@Array it }.toList()
 			pagesIndexesToParse.parallelStream().forEach { index: Int ->
 				val url = "${catalogEntry.hyperLink}/${index + 1}"
 				val pageHtml = retrieveComicsPageHtml(url)
-				val parsedComicsPage: ComicsPageData = comicsParser.parse(pageHtml)
-				pageEntries[index] = ComicsPageEntity(
-					catalogEntry.title,
-					parsedComicsPage.imageUrl,
-					parsedComicsPage.issueName,
-					catalogEntry
-				)
+				pageEntries[index] = comicsParser.parse(pageHtml)
 			}
-			return pageEntries.toList() as List<ComicsPageEntity>
+			return pageEntries.toList() as List<ComicsPageData>
 		} catch (e: Exception) {
-			logger.error("failed to parse some pages, returning empty result for ${catalogEntry.title}")
+			logger.error("failed to parse some pages, returning empty result for ${catalogEntry.title}", e)
 			return emptyList()
 		}
 	}
@@ -188,12 +222,19 @@ class ParsingTask(
 	
 	@Throws(IllegalStateException::class)
 	private fun retrieveComicsPageHtml(comicsPageUrl: String): String {
-		val resp = webClient
-			.get()
-			.uri(comicsPageUrl)
-			.retrieve()
-		return resp.bodyToMono(String::class.java).block()
-			?: throw IllegalStateException("no body!")
+		fun retrieveComicsHtml(): String {
+			val resp = webClient
+				.get()
+				.uri(comicsPageUrl)
+				.retrieve()
+			return resp.bodyToMono(String::class.java).block() ?: throw IllegalStateException("no body!")
+		}
+		return try {
+			retrieveComicsHtml()
+		} catch (e: Exception) {
+			// Периодически 500 стреляют, для длинных комиксов критично.
+			retrieveComicsHtml()
+		}
 	}
 	
 	private fun CatalogEntity.olderThan(other: CatalogEntity): Boolean {
