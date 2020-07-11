@@ -11,12 +11,12 @@ services:
       - acomics-service
     restart: always
     volumes:
-      #- ./nginx:/etc/nginx/conf.d
-      - /root/nginx:/etc/nginx/conf.d
+      - ./nginx:/etc/nginx/conf.d
+      #- /root/nginx:/etc/nginx/conf.d
       # Верхний дев, нижний прод.
 
   acomics-service:
-    image: stereocabbage/acomics:1.0.8
+    image: stereocabbage/acomics:1.0.9
     restart: always
     networks:
       - acomics-network
@@ -39,8 +39,8 @@ services:
       - MYSQL_ONETIME_PASSWORD=true
       - spring.jpa.hibernate.ddl-auto=update
     volumes:
-      #- ./data:/var/lib/mysql
-      - /root/data:/var/lib/mysql
+      - ./data:/var/lib/mysql
+      #- /root/data:/var/lib/mysql
       # Верхний дев, нижний прод.
 
 networks:

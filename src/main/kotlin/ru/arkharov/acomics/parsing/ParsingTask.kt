@@ -8,9 +8,9 @@ import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.util.UriBuilder
 import ru.arkharov.acomics.db.*
 import ru.arkharov.acomics.parsing.catalog.CatalogHTMLParser
-import ru.arkharov.acomics.parsing.comics.ComicsComments
 import ru.arkharov.acomics.parsing.comics.ComicsHTMLParser
-import ru.arkharov.acomics.parsing.comics.ComicsPageData
+import ru.arkharov.acomics.parsing.comics.ParsedComicsComment
+import ru.arkharov.acomics.parsing.comics.ParsedComicsPage
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -37,6 +37,7 @@ class ParsingTask(
 	private val comicsParser: ComicsHTMLParser,
 	private val catalogRepository: CatalogRepository,
 	private val comicsRepository: ComicsRepository,
+	private val comicsUploaderRepository: ComicsUploaderRepository,
 	private val commentsRepository: CommentsRepository
 ) {
 	
@@ -74,18 +75,18 @@ class ParsingTask(
 					val optionalSavedEntry: Optional<CatalogEntity> = catalogRepository.findById(catalogEntry.catalogId)
 					if (!optionalSavedEntry.isPresent) {
 						logger.info("found new comics of title: ${catalogEntry.title}, catalogId: ${catalogEntry.catalogId}")
-						val comicsEntries: List<ComicsPageData> = getComicsPages(catalogEntry)
+						val parsedComicsEntries: List<ParsedComicsPage> = getComicsPages(catalogEntry)
 						updatedCatalogItems++
-						updatedComicsItems += comicsEntries.size
-						upsert(catalogEntry, comicsEntries)
+						updatedComicsItems += parsedComicsEntries.size
+						upsert(catalogEntry, parsedComicsEntries)
 					} else {
 						val savedEntry: CatalogEntity = optionalSavedEntry.get()
 						if (savedEntry.olderThan(catalogEntry)) {
 							logger.info("${catalogEntry.title} is changed, updating whole entry")
-							val comicsEntries: List<ComicsPageData> = getComicsPages(catalogEntry)
+							val parsedComicsEntries: List<ParsedComicsPage> = getComicsPages(catalogEntry)
 							updatedCatalogItems++
-							updatedComicsItems += comicsEntries.size
-							upsert(catalogEntry, comicsEntries)
+							updatedComicsItems += parsedComicsEntries.size
+							upsert(catalogEntry, parsedComicsEntries)
 						} else {
 							logger.info("${catalogEntry.title} is up to date")
 							updatedCatalogItems++
@@ -117,9 +118,9 @@ class ParsingTask(
 					continue
 				}
 				catalogPageEntries.parallelStream().forEach { catalogEntry: CatalogEntity ->
-					val comicsEntries: List<ComicsPageData> = getComicsPages(catalogEntry)
+					val parsedComicsEntries: List<ParsedComicsPage> = getComicsPages(catalogEntry)
 					logger.info("found comics of title: ${catalogEntry.title}, catalogId: ${catalogEntry.catalogId}")
-					upsert(catalogEntry, comicsEntries)
+					upsert(catalogEntry, parsedComicsEntries)
 				}
 				page++
 			}
@@ -131,67 +132,84 @@ class ParsingTask(
 		}
 	}
 	
-	fun upsert(catalogEntry: CatalogEntity, comicsParsedPages: List<ComicsPageData>) {
+	fun upsert(catalogEntry: CatalogEntity, comicsParsedPages: List<ParsedComicsPage>) {
 		val commentsEntities: MutableList<CommentsEntity> = LinkedList()
-		val comicsEntries: List<ComicsPageEntity> = comicsParsedPages.map { comicsPageData: ComicsPageData ->
+		val comicsUploaderEntities: MutableList<ComicsUploaderEntity> = LinkedList()
+		val comicsEntries: List<ComicsPageEntity> = comicsParsedPages.mapIndexed { index, comicsPageData ->
 			val comicsEntity = ComicsPageEntity(
+				ComicsId(catalogEntry.catalogId, index.inc()),
 				catalogEntry.title,
 				comicsPageData.imageUrl,
 				comicsPageData.issueName,
 				catalogEntry
 			)
-			commentsEntities.addAll(comicsPageData.comments.map { comicsComments: ComicsComments ->
+			comicsUploaderEntities.add(
+				ComicsUploaderEntity(
+					comicsId = comicsEntity.comicsId,
+					comicsPageEntity = comicsEntity,
+					userName = comicsPageData.parsedUploaderComment.userName,
+					userProfileUrl = comicsPageData.parsedUploaderComment.userProfileUrl,
+					issueDate = comicsPageData.parsedUploaderComment.issueDate.toLongOrNull() ?: -1L,
+					commentBody = comicsPageData.parsedUploaderComment.commentBody
+				)
+			)
+			commentsEntities.addAll(comicsPageData.comments.map { parsedComicsComment: ParsedComicsComment ->
 				CommentsEntity(
-					userName = comicsComments.userName,
-					userStatus = comicsComments.userStatus,
-					userAvatarImageUrl = comicsComments.userProfileUrl,
-					commentBody = comicsComments.commentBody,
-					formattedDate = comicsComments.formattedDate,
+					userName = parsedComicsComment.userName,
+					userStatus = parsedComicsComment.userStatus,
+					userAvatarImageUrl = parsedComicsComment.userProfileUrl,
+					commentBody = parsedComicsComment.commentBody,
+					date = parsedComicsComment.date.toLongOrNull() ?: -1L,
+					commentId = parsedComicsComment.commentId,
+					editedData = parsedComicsComment.editedData,
 					comics = comicsEntity
 				)
 			})
-			return@map comicsEntity
+			return@mapIndexed comicsEntity
 		}
-		upsertToDb(catalogEntry, comicsEntries, commentsEntities)
+		upsertToDb(catalogEntry, comicsEntries, comicsUploaderEntities, commentsEntities)
 	}
 	
 	@Transactional
 	fun upsertToDb(
 		catalogEntry: CatalogEntity,
 		comicsEntries: List<ComicsPageEntity>,
+		comicsUploaderEntries: List<ComicsUploaderEntity>,
 		commentsEntity: List<CommentsEntity>
 	) {
 		synchronized(block) {
 			val startTime = System.currentTimeMillis()
 			catalogRepository.save(catalogEntry)
 			if (comicsEntries.isNotEmpty()) {
-				val previousComics = comicsRepository.findByCatalog(catalogEntry)
-				previousComics.forEach { previousComics: ComicsPageEntity ->
+				val previousComicsList = comicsRepository.findByCatalog(catalogEntry)
+				previousComicsList.forEach { previousComics: ComicsPageEntity ->
 					commentsRepository.deleteByComics(previousComics)
+					comicsUploaderRepository.deleteByComicsId(previousComics.comicsId)
 				}
 				comicsRepository.deleteByCatalog(catalogEntry)
 				comicsRepository.saveAll(comicsEntries)
 				commentsRepository.saveAll(commentsEntity)
+				comicsUploaderRepository.saveAll(comicsUploaderEntries)
 			}
 			val finishTime = System.currentTimeMillis()
 			logger.info("db updated for ${finishTime - startTime}ms, for ${catalogEntry.catalogId}")
 		}
 	}
 	
-	fun getComicsPages(catalogEntry: CatalogEntity): List<ComicsPageData> {
+	fun getComicsPages(catalogEntry: CatalogEntity): List<ParsedComicsPage> {
 		if (catalogEntry.totalPages == 0) {
 			logger.info("comics: ${catalogEntry.title} has no pages at all, catalog url: ${catalogEntry.hyperLink}")
 			return emptyList()
 		}
 		try {
-			val pageEntries: Array<ComicsPageData?> = arrayOfNulls(catalogEntry.totalPages)
+			val pageEntryParseds: Array<ParsedComicsPage?> = arrayOfNulls(catalogEntry.totalPages)
 			val pagesIndexesToParse: List<Int> = Array(catalogEntry.totalPages) { return@Array it }.toList()
 			pagesIndexesToParse.parallelStream().forEach { index: Int ->
 				val url = "${catalogEntry.hyperLink}/${index + 1}"
 				val pageHtml = retrieveComicsPageHtml(url)
-				pageEntries[index] = comicsParser.parse(pageHtml)
+				pageEntryParseds[index] = comicsParser.parse(pageHtml)
 			}
-			return pageEntries.toList() as List<ComicsPageData>
+			return pageEntryParseds.toList() as List<ParsedComicsPage>
 		} catch (e: Exception) {
 			logger.error("failed to parse some pages, returning empty result for ${catalogEntry.title}", e)
 			return emptyList()
@@ -200,40 +218,44 @@ class ParsingTask(
 	
 	@Throws(IllegalStateException::class)
 	private fun retrieveCatalogHtml(page: Int, sortType: String): String {
-		return webClient
-			.get()
-			.uri(Function { builder: UriBuilder ->
-				return@Function builder
-					.path("/comics")
-					.queryParam(CATALOG_CATEGORY_QUERY_PARAM, "")
-					.queryParam(CATALOG_RATING_QUERY_PARAM, *ratingParams)
-					.queryParam(CATALOG_TRANSLATION_TYPE_QUERY_PARAM, CATALOG_TRANSLATION_TYPE_ANY)
-					.queryParam(CATALOG_SORT_QUERY_PARAM, sortType)
-					.queryParam(CATALOG_UPDATABLE_QUERY_PARAM, "0")
-					.queryParam(CATALOG_MINIMAL_ISSUES_COUNT_QUERY_PARAM, "0")
-					.queryParam(CATALOG_SKIP_QUERY_PARAM, "${page * ACOMICS_DEFAULT_PAGINATION_OFFSET}")
-					.build()
-			})
-			.retrieve()
-			.bodyToMono(String::class.java)
-			.block()
-			?: throw IllegalStateException("no body!")
+		return tryTwice {
+			webClient.get()
+				.uri(Function { builder: UriBuilder ->
+					return@Function builder
+						.path("/comics")
+						.queryParam(CATALOG_CATEGORY_QUERY_PARAM, "")
+						.queryParam(CATALOG_RATING_QUERY_PARAM, *ratingParams)
+						.queryParam(CATALOG_TRANSLATION_TYPE_QUERY_PARAM, CATALOG_TRANSLATION_TYPE_ANY)
+						.queryParam(CATALOG_SORT_QUERY_PARAM, sortType)
+						.queryParam(CATALOG_UPDATABLE_QUERY_PARAM, "0")
+						.queryParam(CATALOG_MINIMAL_ISSUES_COUNT_QUERY_PARAM, "0")
+						.queryParam(CATALOG_SKIP_QUERY_PARAM, "${page * ACOMICS_DEFAULT_PAGINATION_OFFSET}")
+						.build()
+				})
+				.retrieve()
+				.bodyToMono(String::class.java)
+				.block()
+				?: throw IllegalStateException("no body!")
+		}
 	}
 	
 	@Throws(IllegalStateException::class)
 	private fun retrieveComicsPageHtml(comicsPageUrl: String): String {
-		fun retrieveComicsHtml(): String {
+		return tryTwice {
 			val resp = webClient
 				.get()
 				.uri(comicsPageUrl)
 				.retrieve()
-			return resp.bodyToMono(String::class.java).block() ?: throw IllegalStateException("no body!")
+			resp.bodyToMono<String>(String::class.java).block() ?: throw IllegalStateException("no body!")
 		}
+	}
+	
+	// Периодически 500 стреляют, для длинных комиксов критично. Идиотизьм! Переделуть на проверку пятисоточек!
+	private fun <TYPE> tryTwice(block: () -> TYPE): TYPE {
 		return try {
-			retrieveComicsHtml()
+			block.invoke()
 		} catch (e: Exception) {
-			// Периодически 500 стреляют, для длинных комиксов критично.
-			retrieveComicsHtml()
+			block.invoke()
 		}
 	}
 	

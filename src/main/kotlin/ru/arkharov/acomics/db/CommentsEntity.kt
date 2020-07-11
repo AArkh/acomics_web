@@ -9,11 +9,13 @@ data class CommentsEntity(
 	@field:GeneratedValue(strategy = GenerationType.IDENTITY)
 	val id: Long = 0,
 	val userName: String,
-	val userStatus: String?, // особый аттрибут пользователя. "Тайпер", "Переводчик", такие штуки...
+	val userStatus: String?, //user особый аттрибут пользователя. "Тайпер", "Переводчик", такие штуки...
 	val userAvatarImageUrl: String,
-	@Column(columnDefinition = "text")
+	@field:Column(columnDefinition = "text")
 	val commentBody: String,
-	val formattedDate: String, // "2 марта" или "15 марта 2019 года"
+	val date: Long,
+	val commentId: String, //формата #1152325
+	val editedData: String?, // формата "Отредактировано «RusPeanuts» 04.01.2020 02:19:54"
 	@field:ManyToOne(fetch = FetchType.LAZY)
 	val comics: ComicsPageEntity
 )

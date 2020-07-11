@@ -6,5 +6,8 @@ import org.springframework.transaction.annotation.Transactional
 interface CommentsRepository : JpaRepository<CommentsEntity, Long> {
 	
 	@Transactional
+	fun findByComics(comics: ComicsPageEntity): List<CommentsEntity>
+	
+	@Transactional
 	fun deleteByComics(comicsPageEntity: ComicsPageEntity)
 }

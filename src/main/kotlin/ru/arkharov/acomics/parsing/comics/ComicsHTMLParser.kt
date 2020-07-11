@@ -23,6 +23,7 @@ private const val AUTHOR_BLOCK_AVATAR = "avatar"
 private const val AUTHOR_BLOCK_INFO = "info"
 private const val AUTHOR_BLOCK_USER_NAME = "userName"
 private const val AUTHOR_BLOCK_TIME = "time"
+private const val COMMENTS_BLOCK_TIME_ATTR = "data-value"
 private const val AUTHOR_BLOCK_COMMENT = "description"
 
 private const val COMMENTS_BLOCK_ID = "contentMargin"
@@ -37,7 +38,7 @@ private const val COMMENT_BLOCK_COMMENT_EDITED = "edited"
 class ComicsHTMLParser {
 	
 	@Throws(ParseException::class)
-	fun parse(html: String): ComicsPageData {
+	fun parse(html: String): ParsedComicsPage {
 		val doc: Document = Jsoup.parse(html)
 		val contentContainer: Element = doc.getElementById(CONTENT)
 		
@@ -74,27 +75,28 @@ class ComicsHTMLParser {
 		val issueDate: String = infoElement.getElementsByClass(AUTHOR_BLOCK_TIME)
 			.first()
 			.text()
+			.replace("=", "")
 		val authorsCommentBody: String = authors.getElementsByClass(AUTHOR_BLOCK_COMMENT).text()
 		
-		val uploaderComment = UploaderComment(
+		val uploaderComment = ParsedUploaderComment(
 			userName,
 			"$BASE_ACOMICS_URL$avatarUrlPostfix",
 			issueDate,
 			authorsCommentBody
 		)
-		val comments: List<ComicsComments> = parseComments(contentContainer)
-		return ComicsPageData(
-			imageLink,
-			issueName,
-			issueNumber,
-			nextPageLink,
-			prevPageLink,
-			uploaderComment,
-			comments
+		val comments: List<ParsedComicsComment> = parseComments(contentContainer)
+		return ParsedComicsPage(
+			imageUrl = imageLink,
+			issueName = issueName,
+			issueNumber = issueNumber,
+			nextPageAddress = nextPageLink,
+			prevPageAddress = prevPageLink,
+			parsedUploaderComment = uploaderComment,
+			comments = comments
 		)
 	}
 	
-	private fun parseComments(contentContainer: Element): List<ComicsComments> {
+	private fun parseComments(contentContainer: Element): List<ParsedComicsComment> {
 		try {
 			val commentsBlock: Element = contentContainer.getElementById(COMMENTS_BLOCK_ID)
 			val rawComments: List<Element> = commentsBlock.children().filter { element: Element ->
@@ -109,15 +111,15 @@ class ComicsHTMLParser {
 				val commentBody: String = rawCommentBlock.ownText()
 				val commentsData: Element = rawCommentBlock.getElementsByClass(COMMENT_BLOCK_INFO).first()
 				val userName: String = commentsData.getElementsByClass(COMMENT_BLOCK_USERMANE).first().text()
-				val formattedDate: String = commentsData.getElementsByClass(AUTHOR_BLOCK_TIME).first().text()
+				val date: String = commentsData.getElementsByClass(AUTHOR_BLOCK_TIME).attr(COMMENTS_BLOCK_TIME_ATTR)
 				val userStatus: String? = commentsData.getElementsByClass(COMMENT_BLOCK_ROLE).first()?.text()
 				val commentId: String = commentsData.getElementsByClass(COMMENT_BLOCK_COMMENT_ID).first().text()
 				val editedDate: String? = rawCommentBlock.getElementsByClass(COMMENT_BLOCK_COMMENT_EDITED).first()?.text()
-				return@map ComicsComments(
+				return@map ParsedComicsComment(
 					userName,
 					"$BASE_ACOMICS_URL$avatarUrl",
 					userStatus,
-					formattedDate,
+					date,
 					commentBody,
 					commentId,
 					editedDate
