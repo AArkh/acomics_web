@@ -93,6 +93,7 @@ class ParsingTaskTest {
 			assert(uploaderData.issueDate > 0L)
 			assert(uploaderData.userName.isNotEmpty())
 			assert(uploaderData.userProfileUrl.isNotEmpty())
+			//todo here
 			
 			val commentsByComics = commentsRepository.findByComics(comicsEntity)
 			if (commentsByComics.isNotEmpty()) {

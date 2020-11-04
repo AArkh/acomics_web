@@ -16,7 +16,7 @@ services:
       # Верхний дев, нижний прод.
 
   acomics-service:
-    image: stereocabbage/acomics:1.0.9
+    image: stereocabbage/acomics:1.0.12
     restart: always
     networks:
       - acomics-network
@@ -29,6 +29,7 @@ services:
 
   acomics-database:
     image: mysql:8.0.19
+    restart: always
     networks:
       - acomics-network
     environment:

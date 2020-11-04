@@ -3,6 +3,7 @@ package ru.arkharov.acomics.parsing.comics
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.jsoup.safety.Whitelist
 import org.springframework.stereotype.Component
 import java.text.ParseException
 
@@ -22,6 +23,7 @@ private const val AUTHOR_BLOCK_AVATAR_TAG = "img"
 private const val AUTHOR_BLOCK_AVATAR = "avatar"
 private const val AUTHOR_BLOCK_INFO = "info"
 private const val AUTHOR_BLOCK_USER_NAME = "userName"
+private const val AUTHOR_BLOCK_TITLE = "title"
 private const val AUTHOR_BLOCK_TIME = "time"
 private const val COMMENTS_BLOCK_TIME_ATTR = "data-value"
 private const val AUTHOR_BLOCK_COMMENT = "description"
@@ -72,16 +74,39 @@ class ComicsHTMLParser {
 		val userName: String = infoElement.getElementsByClass(AUTHOR_BLOCK_USER_NAME)
 			.first()
 			.text()
-		val issueDate: String = infoElement.getElementsByClass(AUTHOR_BLOCK_TIME)
+		val issueTitle: String = infoElement.getElementsByClass(AUTHOR_BLOCK_TITLE)
+			?.first()
+			?.text()
+			?: ""
+		
+		// Возвращает bkup формата "=77786159", что является отступом в секундах от текущего unix-времени.
+		val issueBkupDate: String = infoElement.getElementsByClass(AUTHOR_BLOCK_TIME)
 			.first()
 			.text()
 			.replace("=", "")
-		val authorsCommentBody: String = authors.getElementsByClass(AUTHOR_BLOCK_COMMENT).text()
+		val issueDate: Long? = try {
+			val bkupDate = issueBkupDate.toLongOrNull()
+			val currentDateInSeconds = System.currentTimeMillis() / 1000
+			if (bkupDate == null) {
+				null
+			} else currentDateInSeconds - bkupDate
+		} catch (ignored: Exception) {
+			null
+		}
+		
+		val authorsCommentBodyHtml = authors.getElementsByClass(AUTHOR_BLOCK_COMMENT)
+		val authorsCommentBody = Jsoup.clean(
+			authorsCommentBodyHtml.html(),
+			doc.baseUri(),
+			Whitelist().addAttributes("a", "href").addAttributes("img", "src"),
+			Document.OutputSettings().prettyPrint(true).outline(true)
+		).replace("\n", "\n\n")
 		
 		val uploaderComment = ParsedUploaderComment(
 			userName,
 			"$BASE_ACOMICS_URL$avatarUrlPostfix",
 			issueDate,
+			issueTitle,
 			authorsCommentBody
 		)
 		val comments: List<ParsedComicsComment> = parseComments(contentContainer)

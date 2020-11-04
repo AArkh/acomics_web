@@ -19,7 +19,6 @@ import ru.arkharov.acomics.parsing.comics.ParsedComicsPage
 @AutoConfigureTestEntityManager
 class ComicsParsingTest {
 	
-	
 	@field:Autowired
 	private var comicsHTMLParser: ComicsHTMLParser? = null
 	@field:Autowired
@@ -28,7 +27,11 @@ class ComicsParsingTest {
 	private val comicsLinks = arrayOf(
 		"https://acomics.ru/~outsider",
 		"https://acomics.ru/~WSWfG",
-		"https://acomics.ru/~4pairs"
+		"https://acomics.ru/~4pairs",
+		"https://acomics.ru/~Quested",
+		"https://acomics.ru/~ShutEye-1",
+		"https://acomics.ru/~BFT12",
+		"https://acomics.ru/~tokatokatoka"
 	)
 	
 	@Test
@@ -40,19 +43,17 @@ class ComicsParsingTest {
 			repeat(10) {
 				val webPage: String = retrieveComicsPageHtml("$comicsLink/${it.inc()}")
 				val parsedComicsPage: ParsedComicsPage = parser.parse(webPage)
-				println(parsedComicsPage)
 				assert(parsedComicsPage.imageUrl.isNotEmpty())
-				assert(parsedComicsPage.parsedUploaderComment.issueDate.isNotEmpty())
+				assert(parsedComicsPage.parsedUploaderComment.issueDate != null)
 				assert(parsedComicsPage.parsedUploaderComment.userName.isNotEmpty())
 				assert(parsedComicsPage.parsedUploaderComment.userProfileUrl.isNotEmpty())
 				assert(parsedComicsPage.imageUrl.isNotEmpty())
-				assert(!parsedComicsPage.nextPageAddress.isNullOrEmpty())
 				comments.addAll(parsedComicsPage.comments)
 				val uploaderComment: String? = parsedComicsPage.parsedUploaderComment.commentBody
 				if (uploaderComment != null) {
 					uploaderComments.add(uploaderComment)
 				}
-				assert(parsedComicsPage.parsedUploaderComment.issueDate.toLong() > 0L)
+				assert(parsedComicsPage.parsedUploaderComment.issueDate!! > 0L)
 			}
 			assert(comments.any {
 				it.editedData != null

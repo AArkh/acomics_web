@@ -3,6 +3,7 @@ package ru.arkharov.acomics.db
 import java.io.Serializable
 import javax.persistence.*
 
+//todo here
 @Entity
 @Table(name = COMICS_UPLOADER_TABLE)
 data class ComicsUploaderEntity(

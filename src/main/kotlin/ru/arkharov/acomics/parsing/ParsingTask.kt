@@ -46,11 +46,12 @@ class ParsingTask(
 	private val ratingParams = arrayOf("1", "2", "3", "4", "5", "6")
 	private val block = Any()
 	
-	@Scheduled(fixedDelay = HOUR)
+	//@Scheduled(fixedDelay = HOUR)
 	fun parse() {
 		if (comicsRepository.count() >= 0) {
 			logger.info("Updating starts")
-			updateParsingTask()
+			//updateParsingTask()
+			initialParseTask()
 		} else {
 			logger.info("Initial parsing starts")
 			initialParseTask()
@@ -149,7 +150,7 @@ class ParsingTask(
 					comicsPageEntity = comicsEntity,
 					userName = comicsPageData.parsedUploaderComment.userName,
 					userProfileUrl = comicsPageData.parsedUploaderComment.userProfileUrl,
-					issueDate = comicsPageData.parsedUploaderComment.issueDate.toLongOrNull() ?: -1L,
+					issueDate = comicsPageData.parsedUploaderComment.issueDate ?: -1L,
 					commentBody = comicsPageData.parsedUploaderComment.commentBody
 				)
 			)

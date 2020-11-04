@@ -13,7 +13,8 @@ data class ParsedComicsPage(
 data class ParsedUploaderComment(
 	val userName: String,
 	val userProfileUrl: String,
-	val issueDate: String,
+	val issueDate: Long?,
+	val commentTitle: String?,
 	val commentBody: String?
 )
 
